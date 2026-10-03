@@ -1,6 +1,6 @@
 import { Routes, Route } from 'react-router-dom';
-import Lobby from "../screens/Lobby.jsx"
 import RoomPage from "../screens/RoomPage.jsx"
+import Lobby from '../screens/lobby.jsx';
 
 function App() {
   return (

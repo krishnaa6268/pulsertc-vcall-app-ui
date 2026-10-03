@@ -1,5 +1,5 @@
 import { Routes, Route } from 'react-router-dom';
-import Lobby from "../screens/lobby.jsx"
+import Lobby from "../screens/Lobby.jsx"
 import RoomPage from "../screens/RoomPage.jsx"
 
 function App() {

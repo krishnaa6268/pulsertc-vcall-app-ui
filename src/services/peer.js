@@ -61,6 +61,7 @@ class PeerService {
           "stun:stun2.l.google.com:19302",
           "stun:stun.cloudflare.com:3478",
           "stun:global.stun.twilio.com:3478",
+          "stun:stun.relay.metered.ca:80",
         ],
       },
     ];
@@ -77,6 +78,7 @@ class PeerService {
         username: turnUsername,
         credential: turnCredential,
       });
+      console.log("[ICE] TURN relay server active for CGNAT / cross-network calls.");
     }
 
     this.peer = new RTCPeerConnection({ iceServers });

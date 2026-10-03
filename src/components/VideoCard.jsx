@@ -15,12 +15,21 @@ const VideoCard = ({
     const videoRef = useRef(null);
     const containerRef = useRef(null);
 
-    // Bind stream to video node and ensure playback
+    // Bind stream to video node and ensure smooth playback
     useEffect(() => {
-        if (videoRef.current && stream) {
-            videoRef.current.srcObject = stream;
-            videoRef.current.play().catch((err) => {
-                console.warn(`[${label}] video.play() error:`, err);
+        const videoEl = videoRef.current;
+        if (!videoEl || !stream) return;
+
+        if (videoEl.srcObject !== stream) {
+            videoEl.srcObject = stream;
+        }
+
+        const playPromise = videoEl.play();
+        if (playPromise !== undefined) {
+            playPromise.catch((err) => {
+                if (err.name !== "AbortError") {
+                    console.warn(`[${label}] video.play() error:`, err);
+                }
             });
         }
     }, [stream, label]);
@@ -49,16 +58,13 @@ const VideoCard = ({
             {stream ? (
                 <>
                     <video
-                        ref={(el) => {
-                            videoRef.current = el;
-                            if (el && stream && el.srcObject !== stream) {
-                                el.srcObject = stream;
-                                el.play().catch(() => {});
-                            }
-                        }}
+                        ref={videoRef}
                         autoPlay
                         playsInline
                         muted={isLocal} // MUST be muted for local to prevent feedback howl
+                        onLoadedMetadata={(e) => {
+                            e.target.play().catch(() => {});
+                        }}
                         className={`w-full h-full object-cover transition-opacity duration-300 ${
                             isVideoMuted ? "opacity-0" : "opacity-100"
                         }`}

@@ -45,19 +45,27 @@ class PeerService {
     return this.peer.localDescription;
   }
 
-  async getAnswer(offer) {
+  async getAnswer(offer = null) {
     if (!this.peer) this.initPeer();
-    await this.peer.setRemoteDescription(new RTCSessionDescription(offer));
+    if (offer && this.peer.signalingState !== "have-remote-offer") {
+      await this.peer.setRemoteDescription(new RTCSessionDescription(offer));
+    }
     const ans = await this.peer.createAnswer();
     await this.peer.setLocalDescription(new RTCSessionDescription(ans));
     await waitForIceGathering(this.peer);
     return this.peer.localDescription;
   }
 
-  async setLocalDescription(ans) {
-    if (this.peer && ans) {
-      await this.peer.setRemoteDescription(new RTCSessionDescription(ans));
+  async setRemoteDescription(desc) {
+    if (!this.peer) this.initPeer();
+    if (desc) {
+      await this.peer.setRemoteDescription(new RTCSessionDescription(desc));
     }
+  }
+
+  async setLocalDescription(ans) {
+    // Kept for backward compatibility
+    return this.setRemoteDescription(ans);
   }
 
   reset() {

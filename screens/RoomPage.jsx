@@ -34,6 +34,7 @@ function RoomPage() {
     const analyserRef = useRef(null);
     const animFrameRef = useRef(null);
     const isNegotiating = useRef(false);
+    const isCallSetupInProgress = useRef(false);
 
     // Handle audio activity detection (visual speaking indicator)
     const setupAudioAnalyser = useCallback((stream) => {
@@ -95,6 +96,21 @@ function RoomPage() {
         }
     }, [isVideoMuted]);
 
+    // Helper to add audio first, video second deterministically to preserve SDP m-lines
+    const addTracksToPeer = useCallback((stream) => {
+        if (!stream || !peer.peer) return;
+        const audioTrack = stream.getAudioTracks()[0];
+        const videoTrack = stream.getVideoTracks()[0];
+        const senders = peer.peer.getSenders();
+
+        if (audioTrack && !senders.some((s) => s.track === audioTrack)) {
+            peer.peer.addTrack(audioTrack, stream);
+        }
+        if (videoTrack && !senders.some((s) => s.track === videoTrack)) {
+            peer.peer.addTrack(videoTrack, stream);
+        }
+    }, []);
+
     // Send or replace local tracks to peer
     const sendStreams = useCallback(() => {
         const stream = myStreamRef.current || myStream;
@@ -103,12 +119,23 @@ function RoomPage() {
             return;
         }
         const senders = peer.peer.getSenders();
-        for (const track of stream.getTracks()) {
-            const sender = senders.find((s) => s.track?.kind === track.kind);
+        const audioTrack = stream.getAudioTracks()[0];
+        const videoTrack = stream.getVideoTracks()[0];
+
+        if (audioTrack) {
+            const sender = senders.find((s) => s.track?.kind === "audio");
             if (sender) {
-                sender.replaceTrack(track);
+                sender.replaceTrack(audioTrack);
             } else {
-                peer.peer.addTrack(track, stream);
+                peer.peer.addTrack(audioTrack, stream);
+            }
+        }
+        if (videoTrack) {
+            const sender = senders.find((s) => s.track?.kind === "video");
+            if (sender) {
+                sender.replaceTrack(videoTrack);
+            } else {
+                peer.peer.addTrack(videoTrack, stream);
             }
         }
     }, [myStream]);
@@ -123,6 +150,7 @@ function RoomPage() {
     // Call remote user: get media, add tracks, THEN send offer with audio & video
     const handleCallUser = useCallback(async () => {
         try {
+            isCallSetupInProgress.current = true;
             setIsCalling(true);
             setCallStatus("calling");
 
@@ -137,14 +165,8 @@ function RoomPage() {
                 setupAudioAnalyser(stream);
             }
 
-            // Add all tracks BEFORE creating the offer
-            const senders = peer.peer.getSenders();
-            for (const track of stream.getTracks()) {
-                const alreadyAdded = senders.some((sender) => sender.track === track);
-                if (!alreadyAdded) {
-                    peer.peer.addTrack(track, stream);
-                }
-            }
+            // Add audio first, then video deterministically
+            addTracksToPeer(stream);
 
             const offer = await peer.getOffer();
             socket.emit("user:call", { to: remoteSocketId, offer });
@@ -152,8 +174,9 @@ function RoomPage() {
             console.error("Error accessing camera/mic:", err);
             setIsCalling(false);
             setCallStatus("idle");
+            isCallSetupInProgress.current = false;
         }
-    }, [remoteSocketId, socket, setupAudioAnalyser]);
+    }, [remoteSocketId, socket, setupAudioAnalyser, addTracksToPeer]);
 
     // Handle Incoming Call
     const handleIncommingCall = useCallback(async ({ from, offer }) => {
@@ -163,11 +186,17 @@ function RoomPage() {
         setCallStatus("incoming");
     }, []);
 
-    // Accept Incoming Call: get media, add tracks, THEN send answer with audio & video
+    // Accept Incoming Call: set remote desc first, get media, add tracks, THEN send answer
     const acceptIncomingCall = useCallback(async () => {
         if (!incomingCallData) return;
         const { from, offer } = incomingCallData;
         try {
+            isCallSetupInProgress.current = true;
+
+            // 1. Set remote description FIRST to align transceivers with caller's SDP m-lines
+            await peer.setRemoteDescription(offer);
+
+            // 2. Get local media stream
             let stream = myStreamRef.current;
             if (!stream) {
                 stream = await navigator.mediaDevices.getUserMedia({
@@ -179,23 +208,22 @@ function RoomPage() {
                 setupAudioAnalyser(stream);
             }
 
-            // Add all tracks BEFORE creating the answer
-            const senders = peer.peer.getSenders();
-            for (const track of stream.getTracks()) {
-                const alreadyAdded = senders.some((sender) => sender.track === track);
-                if (!alreadyAdded) {
-                    peer.peer.addTrack(track, stream);
-                }
-            }
+            // 3. Attach local tracks to the matched transceivers
+            addTracksToPeer(stream);
 
-            const ans = await peer.getAnswer(offer);
+            // 4. Create and send answer
+            const ans = await peer.getAnswer();
             socket.emit("call:accepted", { to: from, ans });
             setIncomingCallData(null);
             setCallStatus("connected");
         } catch (err) {
             console.error("Error answering call:", err);
+        } finally {
+            setTimeout(() => {
+                isCallSetupInProgress.current = false;
+            }, 600);
         }
-    }, [incomingCallData, socket, setupAudioAnalyser]);
+    }, [incomingCallData, socket, setupAudioAnalyser, addTracksToPeer]);
 
     // Decline Incoming Call
     const declineIncomingCall = useCallback(() => {
@@ -207,12 +235,16 @@ function RoomPage() {
     const handleCallAccepted = useCallback(
         async ({ ans }) => {
             try {
-                await peer.setLocalDescription(ans);
+                await peer.setRemoteDescription(ans);
                 console.log("Call Accepted by peer!");
                 setCallStatus("connected");
                 setIsCalling(false);
             } catch (err) {
                 console.error("Error in handleCallAccepted:", err);
+            } finally {
+                setTimeout(() => {
+                    isCallSetupInProgress.current = false;
+                }, 600);
             }
         },
         []
@@ -221,6 +253,10 @@ function RoomPage() {
     // Renegotiation handling (safe from glare/collision)
     const handleNegoNeeded = useCallback(async () => {
         if (!remoteSocketId) return;
+        if (isCallSetupInProgress.current) {
+            console.log("Skipping nego needed: call setup in progress");
+            return;
+        }
         if (peer.peer.signalingState !== "stable" || isNegotiating.current) {
             console.log("Skipping nego needed, state is:", peer.peer.signalingState);
             return;
@@ -250,7 +286,8 @@ function RoomPage() {
                     console.log("Skipping incoming nego, state is:", peer.peer.signalingState);
                     return;
                 }
-                const ans = await peer.getAnswer(offer);
+                await peer.setRemoteDescription(offer);
+                const ans = await peer.getAnswer();
                 socket.emit("peer:nego:done", { to: from, ans });
             } catch (err) {
                 console.error("Error in handleNegoNeedIncoming:", err);
@@ -262,7 +299,7 @@ function RoomPage() {
     const handleNegoNeedFinal = useCallback(async ({ ans }) => {
         try {
             if (peer.peer.signalingState === "have-local-offer") {
-                await peer.setLocalDescription(ans);
+                await peer.setRemoteDescription(ans);
             }
         } catch (err) {
             console.error("Error in handleNegoNeedFinal:", err);
@@ -275,12 +312,20 @@ function RoomPage() {
             console.log("GOT REMOTE TRACK!", e.track.kind, e.streams);
             const stream = e.streams && e.streams[0] ? e.streams[0] : null;
             if (stream) {
-                setRemoteStream(stream);
+                setRemoteStream(new MediaStream(stream.getTracks()));
+                stream.onaddtrack = () => {
+                    setRemoteStream(new MediaStream(stream.getTracks()));
+                };
+                stream.onremovetrack = () => {
+                    setRemoteStream(new MediaStream(stream.getTracks()));
+                };
             } else if (e.track) {
                 setRemoteStream((prev) => {
-                    const newStream = prev ? prev : new MediaStream();
-                    newStream.addTrack(e.track);
-                    return newStream;
+                    const tracks = prev ? prev.getTracks() : [];
+                    if (!tracks.some((t) => t.id === e.track.id)) {
+                        tracks.push(e.track);
+                    }
+                    return new MediaStream(tracks);
                 });
             }
             setCallStatus("connected");

@@ -5,7 +5,6 @@ const SocketContext = createContext(null);
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL;
 console.log("BACKEND_URL:", BACKEND_URL);
 
-const socket = io(BACKEND_URL);
 export const SocketProvider = (props) => {
     const memoizedSocket = useMemo(() => io(BACKEND_URL), []);
 

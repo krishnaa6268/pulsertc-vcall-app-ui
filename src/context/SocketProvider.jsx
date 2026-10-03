@@ -2,9 +2,10 @@ import { createContext, useMemo, useContext } from "react";
 import { io } from "socket.io-client";
 
 const SocketContext = createContext(null);
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || "http://localhost:8000";
 
 export const SocketProvider = (props) => {
-    const memoizedSocket = useMemo(() => io("http://localhost:8000"), []);
+    const memoizedSocket = useMemo(() => io(BACKEND_URL), []);
 
     return (
         <SocketContext.Provider value={memoizedSocket}>

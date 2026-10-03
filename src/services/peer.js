@@ -1,21 +1,49 @@
-const waitForIceGathering = (pc) => {
+const waitForIceGathering = (pc, maxWaitMs = 4000) => {
   return new Promise((resolve) => {
     if (!pc || pc.iceGatheringState === "complete") {
       resolve();
       return;
     }
-    const checkState = () => {
-      if (pc.iceGatheringState === "complete") {
-        pc.removeEventListener("icegatheringstatechange", checkState);
-        resolve();
+
+    let hasSrflxOrRelay = false;
+    let timer = null;
+
+    const onCandidate = (e) => {
+      if (e.candidate) {
+        const type = e.candidate.type;
+        console.log(
+          `[ICE] Candidate discovered: typ ${type} (${e.candidate.protocol} ${e.candidate.address || e.candidate.ip}:${e.candidate.port})`
+        );
+        if (type === "srflx" || type === "relay") {
+          hasSrflxOrRelay = true;
+        }
       }
     };
-    pc.addEventListener("icegatheringstatechange", checkState);
-    // 1-second timeout fallback in case STUN gathering takes longer
-    setTimeout(() => {
+
+    const cleanup = () => {
+      if (timer) clearTimeout(timer);
       pc.removeEventListener("icegatheringstatechange", checkState);
+      pc.removeEventListener("icecandidate", onCandidate);
       resolve();
-    }, 1200);
+    };
+
+    const checkState = () => {
+      console.log("[ICE] Gathering state:", pc.iceGatheringState);
+      if (pc.iceGatheringState === "complete") {
+        cleanup();
+      }
+    };
+
+    pc.addEventListener("icecandidate", onCandidate);
+    pc.addEventListener("icegatheringstatechange", checkState);
+
+    // Sufficient timeout for STUN/TURN servers to discover public IP across different cities/ISPs
+    timer = setTimeout(() => {
+      console.log(
+        `[ICE] Gathering timeout reached (${maxWaitMs}ms), continuing with SDP. Has public candidate: ${hasSrflxOrRelay}`
+      );
+      cleanup();
+    }, maxWaitMs);
   });
 };
 
@@ -25,15 +53,40 @@ class PeerService {
   }
 
   initPeer() {
-    this.peer = new RTCPeerConnection({
-      iceServers: [
-        {
-          urls: [
-            "stun:stun.l.google.com:19302",
-            "stun:global.stun.twilio.com:3478",
-          ],
-        },
-      ],
+    const iceServers = [
+      {
+        urls: [
+          "stun:stun.l.google.com:19302",
+          "stun:stun1.l.google.com:19302",
+          "stun:stun2.l.google.com:19302",
+          "stun:stun.cloudflare.com:3478",
+          "stun:global.stun.twilio.com:3478",
+        ],
+      },
+    ];
+
+    // Optional TURN configuration for bypassing strict/symmetric Carrier-Grade NAT (CGNAT) on cellular networks
+    const turnUrl = import.meta.env.VITE_TURN_URL;
+    const turnUsername = import.meta.env.VITE_TURN_USERNAME;
+    const turnCredential =
+      import.meta.env.VITE_TURN_PASSWORD || import.meta.env.VITE_TURN_CREDENTIAL;
+
+    if (turnUrl) {
+      iceServers.push({
+        urls: turnUrl.split(",").map((u) => u.trim()),
+        username: turnUsername,
+        credential: turnCredential,
+      });
+    }
+
+    this.peer = new RTCPeerConnection({ iceServers });
+
+    this.peer.addEventListener("iceconnectionstatechange", () => {
+      console.log("[ICE] Connection state change:", this.peer.iceConnectionState);
+    });
+
+    this.peer.addEventListener("connectionstatechange", () => {
+      console.log("[Peer] Connection state change:", this.peer.connectionState);
     });
   }
 

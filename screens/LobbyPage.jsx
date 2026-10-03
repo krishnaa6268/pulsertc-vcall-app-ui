@@ -2,7 +2,7 @@ import { useState, useCallback, useEffect } from "react";
 import { useSocket } from "../src/context/SocketProvider";
 import { useNavigate } from "react-router-dom";
 
-const Lobby = () => {
+function LobbyPage() {
     const [email, setEmail] = useState("");
     const [roomId, setRoomId] = useState("");
     const [isConnecting, setIsConnecting] = useState(false);
@@ -204,4 +204,4 @@ const Lobby = () => {
     );
 };
 
-export default Lobby;
+export default LobbyPage;

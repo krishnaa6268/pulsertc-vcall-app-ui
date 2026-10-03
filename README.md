@@ -132,7 +132,7 @@ webrtc-fullstack/
     │   ├── main.jsx                # Application root
     │   └── index.css               # Dark theme, glows, and safe-area utilities
     ├── screens/
-    │   ├── lobby.jsx               # Responsive landing page with random room generator
+    │   ├── LobbyPage.jsx               # Responsive landing page with random room generator
     │   └── RoomPage.jsx            # Main calling room orchestrator
     └── package.json
 ```

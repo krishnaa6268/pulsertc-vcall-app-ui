@@ -278,3 +278,24 @@ npm run dev
 | **Remote video black / paused** | Multiple re-renders interrupted `.play()` | Solved: Protected `videoRef` assignment and auto-play on `onLoadedMetadata`. |
 | **Echo / Feedback howling** | Local video element was unmuted | Local `<video>` must always have `muted={true}`. Remote video must have `muted={false}`. |
 | **Socket connection refused** | Backend is asleep (Render free tier) | Visit the backend URL in your browser once to wake up the Render instance. |
+
+
+
+What is WebRTC?
+WebRTC is an open-source project that enables real-time audio, video, and data transfer between browsers and devices without requiring plugins or external software. It supports peer-to-peer (P2P) connections, allowing developers to create applications for voice calls, video chats, and real-time data sharing directly in web browsers or mobile apps.
+
+How Does WebRTC Work?
+WebRTC works by enabling direct peer-to-peer communication between browsers or devices without the need for external plugins or software. It facilitates real-time audio, video, and data exchange over the Internet using several key components:
+
+1. Signaling
+WebRTC begins with a signaling process that establishes the connection between peers. While WebRTC does not mandate a specific signaling protocol, common methods like WebSockets or server-based protocols facilitate the exchange of metadata, including network details, codecs, and session information. This process enables peers to negotiate and agree on communication parameters.
+
+2. NAT Traversal
+To establish a direct connection between peers, even when they’re behind firewalls or NATs (Network Address Translators), WebRTC uses ICE (Interactive Connectivity Establishment). ICE identifies the best path for communication using STUN (Session Traversal Utilities for NAT) and TURN (Traversal Using Relays around NAT) servers to negotiate the connection.
+
+3. Media and Data Channels
+Once signaling is complete and the connection is established, WebRTC facilitates real-time exchange of audio, video, and data through two primary channels:
+
+RTP (Real-time Transport Protocol) for media (audio and video) streams.
+SCTP (Stream Control Transmission Protocol) for real-time data transfer.
+By bypassing the need for intermediaries, WebRTC enables low-latency, high-quality communications for applications like video conferencing, live streaming, and peer-to-peer file sharing directly in web browsers.

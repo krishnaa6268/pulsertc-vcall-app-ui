@@ -199,6 +199,8 @@ function LobbyPage() {
             {/* Bottom Footer */}
             <footer className="relative z-10 py-2 text-center text-[10px] sm:text-xs text-slate-500 shrink-0">
                 PulseRTC • Built with WebRTC & Socket.IO
+                <br />
+                <span className="text-slate-400 font-medium">Krishna K. Gupta</span>
             </footer>
         </div>
     );
